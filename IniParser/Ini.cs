@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace IniParser
 {
-    public static class IniReader
+    public static class Ini
     {
+        #region Read
         public static async Task<T?> ParseAsync<T>(string location) where T : class
         {
             if (string.IsNullOrEmpty(location)) return null;
@@ -150,6 +152,8 @@ namespace IniParser
         private static object ConvertValue(Type type, string value)
         {
             if (type == typeof(bool)) return Convert.ToBoolean(value);
+            if (type == typeof(char)) return char.Parse(value);
+            if (type == typeof(sbyte)) return sbyte.Parse(value);
             if (type == typeof(byte)) return byte.Parse(value);
             if (type == typeof(short)) return short.Parse(value);
             if (type == typeof(ushort)) return ushort.Parse(value);
@@ -159,8 +163,7 @@ namespace IniParser
             if (type == typeof(ulong)) return Convert.ToUInt64(value);
             if (type == typeof(float)) return Convert.ToSingle(value);
             if (type == typeof(double)) return Convert.ToDouble(value);
-            
-            
+            if (type == typeof(decimal)) return Convert.ToDecimal(value);
             if (type == typeof(string)) return value;
             // Add more type conversions as needed
 
@@ -183,5 +186,72 @@ namespace IniParser
                     prop.SetValue(headerPropInstance, item.Value.ToArray());
             }
         }
+
+        #endregion
+
+
+        #region Write
+
+        public static void Write<T>(string location, T obj) where T : class
+        {
+            if (string.IsNullOrEmpty(location)) return;
+            if (location.EndsWith(".ini") == false) throw new ArgumentException("File must end with .ini");
+            if (obj is null) return;
+
+            if (!Directory.Exists(location))
+            {
+                Directory.CreateDirectory(location);
+            }
+
+            var sb = new StringBuilder();
+
+            using var writer = new StreamWriter(location);
+
+            // Get All Properties
+            var properties = obj.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+            foreach (var property in properties)
+            {
+                // Write section header
+                var propName = property.Name;
+                var propValue = property.GetValue(obj, null);
+                if (propValue is null) continue;
+
+                sb.Append($"[{propName}]");
+
+                var subProperties = propValue.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                foreach (var subProperty in subProperties)
+                {
+                    // Get sub-property name and value
+                    var subPropName = subProperty.Name;
+                    var subPropValue = subProperty.GetValue(propValue, null);
+                    if (subPropValue is null) continue;
+                    if (subPropValue is List<string> list)
+                    {
+                        foreach (var item in list)
+                        {
+                            sb.AppendLine($"{subPropName}[] = {item}");
+                        }
+                    }
+                    else if (subPropValue is string[] array)
+                    {
+                        foreach (var item in array)
+                        {
+                            sb.AppendLine($"{subPropName}[] = {item}");
+                        }
+                    }
+                    else
+                    {
+                        sb.AppendLine($"{subPropName} = {subPropValue}");
+                    }
+                }
+                sb.AppendLine();
+            }
+
+            // Write to file
+            writer.Write(sb.ToString().TrimEnd());
+        }
+
+        #endregion
     }
 }
